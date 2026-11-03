@@ -43,7 +43,7 @@ it('reports monitor errors as unavailable rather than inventing container data',
   expect(result.available).toBe(false); expect(result.containers).toEqual([]); expect(result.reason).not.toContain('private');
 });
 it('restricts the Docker sidecar to one exact inventory route', async () => {
-  const server = createMonitorServer();
+  const server = createMonitorServer('test-only-monitor-credential-123456');
   for (const [method, url] of [['POST', '/containers'], ['GET', '/containers/json'], ['POST', '/containers/abc/restart'], ['GET', '/containers?path=/info']]) {
     let status = 200;
     const body = await new Promise<string>(resolve => server.emit('request', { method, url } as IncomingMessage, {

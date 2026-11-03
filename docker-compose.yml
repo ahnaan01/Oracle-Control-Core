@@ -1,4 +1,4 @@
-# An independent project: never add existing Kuma or TelegramDL services here.
+# Independent OCC project. Existing Kuma/TelegramDL are never members.
 name: occ
 x-hardening: &hardening
   restart: unless-stopped
@@ -6,73 +6,139 @@ x-hardening: &hardening
   cap_drop: [ALL]
   security_opt: [no-new-privileges:true]
   pids_limit: 128
-  tmpfs: [/tmp:size=32m,mode=1777]
+  stop_grace_period: 45s
+  tmpfs: ["/tmp:size=32m,mode=1777"]
+x-image: &image
+  image: ${OCC_IMAGE:-occ:local}
+  user: "${OCC_UID:-1000}:${OCC_GID:-1000}"
 services:
   core:
-    <<: *hardening
-    build: .
-    image: occ:local
+    <<: [*hardening, *image]
+    build:
+      context: .
+      args:
+        OCC_UID: ${OCC_UID:-1000}
+        OCC_GID: ${OCC_GID:-1000}
     init: true
     ports: ["127.0.0.1:${OCC_BIND_PORT:-3300}:3000"]
     environment:
       OCC_MODE: ${OCC_MODE:-mock}
+      OCC_PORT: 3000
       OCC_BASE_PATH: ${OCC_BASE_PATH:-/sys}
       OCC_PUBLIC_ORIGIN: ${OCC_PUBLIC_ORIGIN:-http://localhost:3300}
       OCC_SECURE_COOKIES: ${OCC_SECURE_COOKIES:-false}
       OCC_TRUST_PROXY: ${OCC_TRUST_PROXY:-false}
       OCC_RETENTION_DAYS: ${OCC_RETENTION_DAYS:-30}
+      OCC_BOOTSTRAP_ADMIN_ID: ${OCC_BOOTSTRAP_ADMIN_ID:-}
+      OCC_BOOTSTRAP_ADMIN_USERNAME: ${OCC_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      OCC_IDENTITY_FILE: /run/secrets/identities.json
+      OCC_TELEGRAM_ENABLED: ${OCC_TELEGRAM_ENABLED:-false}
+      OCC_WHATSAPP_ENABLED: ${OCC_WHATSAPP_ENABLED:-false}
       OCC_DOCKER_MODE: ${OCC_DOCKER_MODE:-disabled}
       OCC_DOCKER_PROXY_URL: http://docker-monitor:2375
-      OCC_TELEGRAM_GATEWAY_TOKEN: ${OCC_TELEGRAM_GATEWAY_TOKEN:-}
-      OCC_WHATSAPP_GATEWAY_TOKEN: ${OCC_WHATSAPP_GATEWAY_TOKEN:-}
+      OCC_DOCKER_MONITOR_TOKEN_FILE: /run/secrets/docker-monitor
+      OCC_HOST_MONITOR_MODE: ${OCC_HOST_MONITOR_MODE:-disabled}
+      OCC_HOST_MONITOR_URL: http://host-monitor:2376
+      OCC_HOST_MONITOR_TOKEN_FILE: /run/secrets/host-monitor
+      OCC_TELEGRAM_GATEWAY_TOKEN_FILE: /run/secrets/telegram-gateway
+      OCC_WHATSAPP_GATEWAY_TOKEN_FILE: /run/secrets/whatsapp-gateway
     volumes: ["occ-data:/app/data"]
-    networks: [control]
+    secrets: [identities.json, telegram-gateway, whatsapp-gateway, docker-monitor, host-monitor]
+    networks: [gateway, docker-observe, host-observe]
     mem_limit: 384m
     cpus: 0.75
-  # Opt-in only: no socket is mounted into the public-facing core.
   docker-monitor:
-    <<: *hardening
+    <<: [*hardening, *image]
     profiles: [monitoring]
-    image: occ:local
     command: [node, dist/src/services/docker/monitor-main.js]
-    healthcheck: { disable: true }
+    environment:
+      OCC_DOCKER_MONITOR_TOKEN_FILE: /run/secrets/docker-monitor
+      OCC_COLLECTOR_HOST: 0.0.0.0
+    secrets: [docker-monitor]
+    # Bind inside the private collector network only; no host port is published.
+    healthcheck:
+      test: [CMD, node, dist/src/services/collector-health.js, docker]
+      interval: 30s
+      timeout: 5s
     group_add: ["${OCC_DOCKER_GID:-65534}"]
     volumes: ["/var/run/docker.sock:/var/run/docker.sock:ro"]
-    networks: [control]
+    networks: [docker-observe]
     mem_limit: 128m
-    cpus: 0.25
+    cpus: 0.1
+  host-monitor:
+    <<: [*hardening, *image]
+    profiles: [host-monitoring]
+    command: [node, dist/src/services/host/main.js]
+    environment:
+      OCC_HOST_MONITOR_TOKEN_FILE: /run/secrets/host-monitor
+      OCC_COLLECTOR_HOST: 0.0.0.0
+    secrets: [host-monitor]
+    volumes:
+      - {type: bind, source: /proc/stat, target: /host/stat, read_only: true, bind: {create_host_path: false}}
+      - {type: bind, source: /proc/meminfo, target: /host/meminfo, read_only: true, bind: {create_host_path: false}}
+      - {type: bind, source: /proc/uptime, target: /host/uptime, read_only: true, bind: {create_host_path: false}}
+      - {type: bind, source: /proc/loadavg, target: /host/loadavg, read_only: true, bind: {create_host_path: false}}
+      - {type: bind, source: /proc/net/dev, target: /host/netdev, read_only: true, bind: {create_host_path: false}}
+      - {type: bind, source: "${OCC_HOST_DISK_PATH:-./config/host-disk}", target: /host/disk, read_only: true, bind: {create_host_path: false}}
+    networks: [host-observe]
+    healthcheck:
+      test: [CMD, node, dist/src/services/collector-health.js, host]
+      interval: 30s
+      timeout: 5s
+    mem_limit: 128m
+    cpus: 0.1
   telegram:
-    <<: *hardening
-    profiles: [messaging]
-    image: occ:local
+    <<: [*hardening, *image]
+    restart: "on-failure:3"
+    profiles: [telegram]
     command: [node, dist/src/adapters/telegram/worker.js]
-    healthcheck: { disable: true }
     environment:
       OCC_MODE: live
       OCC_CORE_URL: http://core:3000${OCC_BASE_PATH:-/sys}/api/v1
-      OCC_TELEGRAM_GATEWAY_TOKEN: ${OCC_TELEGRAM_GATEWAY_TOKEN:-}
-      OCC_TELEGRAM_TOKEN: ${OCC_TELEGRAM_TOKEN:-}
-    networks: [control, transport-egress]
+      OCC_TELEGRAM_GATEWAY_TOKEN_FILE: /run/secrets/telegram-gateway
+      OCC_TELEGRAM_TOKEN_FILE: /run/secrets/telegram-token
+    secrets: [telegram-gateway, telegram-token]
+    networks: [gateway, transport-egress]
+    healthcheck:
+      test: [CMD, node, dist/src/adapters/health.js, telegram]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
     mem_limit: 192m
     cpus: 0.25
   whatsapp:
-    <<: *hardening
-    profiles: [messaging]
-    image: occ:local
+    <<: [*hardening, *image]
+    restart: "on-failure:3"
+    profiles: [whatsapp]
     command: [node, dist/src/adapters/whatsapp/worker.js]
-    healthcheck: { disable: true }
     environment:
       OCC_MODE: live
       OCC_CORE_URL: http://core:3000${OCC_BASE_PATH:-/sys}/api/v1
-      OCC_WHATSAPP_GATEWAY_TOKEN: ${OCC_WHATSAPP_GATEWAY_TOKEN:-}
+      OCC_WHATSAPP_GATEWAY_TOKEN_FILE: /run/secrets/whatsapp-gateway
       OCC_WHATSAPP_SESSION_DIR: /app/sessions/whatsapp
+    secrets: [whatsapp-gateway]
     volumes: ["occ-whatsapp:/app/sessions/whatsapp"]
-    networks: [control, transport-egress]
+    networks: [gateway, transport-egress]
+    healthcheck:
+      test: [CMD, node, dist/src/adapters/health.js, whatsapp]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
     mem_limit: 384m
     cpus: 0.5
 networks:
-  control: { internal: true }
+  gateway: {internal: true}
+  docker-observe: {internal: true}
+  host-observe: {internal: true}
   transport-egress: {}
 volumes:
   occ-data:
   occ-whatsapp:
+# Generated by npm run setup. No raw credentials are interpolated into Compose.
+secrets:
+  identities.json: {file: ./data/operator/identities.json}
+  telegram-gateway: {file: ./data/operator/telegram-gateway}
+  whatsapp-gateway: {file: ./data/operator/whatsapp-gateway}
+  docker-monitor: {file: ./data/operator/docker-monitor}
+  host-monitor: {file: ./data/operator/host-monitor}
+  telegram-token: {file: ./data/operator/telegram-token}

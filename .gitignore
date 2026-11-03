@@ -8,3 +8,5 @@ config/identities.json
 coverage/
 *.log
 sessions/
+config/*.local.json
+__pycache__/

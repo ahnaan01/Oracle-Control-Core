@@ -58,14 +58,22 @@ an explicit integration policy and signed, replay-protected outbound delivery.
 
 ## Monitoring
 
-OS metrics are real `node:os`, `statfs` and Linux `/proc/net/dev` observations,
-cached for five seconds and polled by the UI every 15/30/60 seconds while visible.
-CPU percentage is calculated from tick deltas, so an initial sample may be
-unavailable. Network counters are cumulative bytes, not throughput estimates.
-Disk statistics describe the application filesystem. Process information is
-limited to count, OCC uptime and RSS; command lines and environment are never
-enumerated. Containerized OS readings are explicitly labeled and are **not** a
-guarantee of host-level cgroup-aware metrics. No host mounts are enabled by default.
+Monitoring has three explicit scopes. `host` is unavailable until an authenticated
+isolated collector supplies fresh host-procfs/selected-filesystem observations.
+`container` reports cgroup v2 memory current/max and CPU quota/usage for OCC's own
+cgroup, with null limits when unlimited. `process` is OCC's own uptime/RSS. Existing
+root OS fields remain for API compatibility and are labeled runtime OS view, not
+confirmed host or container totals. No SQLite schema change is required.
+
+The host collector mounts only individual stat/meminfo/uptime/loadavg/netdev files
+and an empty selected filesystem directory, all read-only. It exposes only
+`GET /metrics` with a private bearer credential, a bounded schema and timestamp.
+Core rejects stale (>30s), future or invalid collector data instead of reusing it
+as fresh. The core has no host mounts. The dashboard prioritizes a fresh host
+collector, then cgroup data; it never substitutes OS totals as confirmed host
+memory. Disk scope and process RSS/uptime are separately visible. Five-second
+sampling and visibility-aware 15/30/60-second polling keep overhead small; requests
+have deadlines/cancellation and stale observations are visibly labeled.
 
 Docker defaults to disabled, with optional visibly labeled mock fixtures for
 development. The opt-in monitor sidecar has exactly one upstream daemon operation:
@@ -81,11 +89,18 @@ Only core is necessary for mock development. Live Telegram and WhatsApp workers
 are opt-in separate processes, with distinct ingress secrets. The WhatsApp session
 volume is not mounted in core, the dashboard, Docker monitor or future AI tools.
 Its worker disables history synchronization, does not archive conversations and
-sends only slash-command candidates to the core. Transport status uses ephemeral
-heartbeats; stale workers are reported as unobserved rather than healthy.
+sends only commands recognized by the core-provided registry catalog. A single
+supervisor class bounds retries, closes retired connections/listeners, and stops
+automatic recovery on authentication/session/replacement failures. WhatsApp uses
+an exclusive session lock and a one-request explicit pairing gate. Transport status uses ephemeral classified
+heartbeats; after 45 seconds without one, workers are unobserved. Health files
+contain status metadata only. Terminal auth states remain observable without
+automatically restarting or pairing again.
 
 Compose binds core to host loopback on a configurable unused port. The control
-network is internal; only messaging workers join an egress network. Existing Kuma
+network is internal. Two separate collector-only networks each attach only core
+and their respective collector. Messaging workers attach only gateway and egress;
+future AI/integration processes must not attach to either collector network. Existing Kuma
 and TelegramDL installations are never imported into OCC's Compose project.
 
 Future AI adapters may call the structured router through an actor obtained from

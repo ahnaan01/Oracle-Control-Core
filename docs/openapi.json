@@ -2985,9 +2985,122 @@
         }
       }
     },
+    "/gateway/{platform}/catalog": {
+      "get": {
+        "summary": "Recognized command names from the shared registry; no handlers or private content",
+        "operationId": "get__gateway_platform_catalog",
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "TransportToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful OCC envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Structured OCC error (no submitted values)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Structured OCC error (no submitted values)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Structured OCC error (no submitted values)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Structured OCC error (no submitted values)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Structured OCC error (no submitted values)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Structured OCC error (no submitted values)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Structured OCC error (no submitted values)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Structured OCC error (no submitted values)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/gateway/{platform}/status": {
       "post": {
-        "summary": "Ephemeral transport heartbeat, no conversation data",
+        "summary": "Ephemeral classified transport heartbeat, no conversation data",
         "operationId": "post__gateway_platform_status",
         "parameters": [
           {
@@ -3009,20 +3122,63 @@
           "content": {
             "application/json": {
               "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
-                "additionalProperties": false,
                 "properties": {
                   "status": {
+                    "type": "string",
                     "enum": [
+                      "starting",
+                      "connecting",
                       "connected",
+                      "reconnecting",
                       "disconnected",
-                      "starting"
+                      "auth_required",
+                      "failed",
+                      "stopped"
+                    ]
+                  },
+                  "reason": {
+                    "default": "none",
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "network",
+                      "restart_required",
+                      "authentication",
+                      "session_invalid",
+                      "replaced",
+                      "retries_exhausted",
+                      "core_unreachable"
+                    ]
+                  },
+                  "attempt": {
+                    "default": 0,
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 6
+                  },
+                  "nextRetryAt": {
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      },
+                      {
+                        "type": "null"
+                      }
                     ]
                   }
                 },
                 "required": [
-                  "status"
-                ]
+                  "status",
+                  "reason",
+                  "attempt",
+                  "nextRetryAt"
+                ],
+                "additionalProperties": false
               }
             }
           }

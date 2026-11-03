@@ -1,6 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { z } from 'zod';
 import { manifestSchema, metadataSchema, healthSchema, eventSchema, scopes } from '../packages/integration-sdk/src/schema.js';
+import { workerStateSchema } from '../src/adapters/recovery.js';
 
 const manifest = z.toJSONSchema(manifestSchema);
 await writeFile('docs/manifest.schema.json', `${JSON.stringify(manifest, null, 2)}\n`);
@@ -46,7 +47,8 @@ route('/gateway/{platform}/commands', 'post', 'Isolated transport ingress; platf
   senderId: { type: 'string' }, chatId: { type: 'string' }, group: { type: 'boolean' }, text: { type: 'string', maxLength: 512 },
   addressedTo: { type: 'string' }, directedElsewhere: { type: 'boolean' },
 }, ['senderId', 'chatId', 'group', 'text']));
-route('/gateway/{platform}/status', 'post', 'Ephemeral transport heartbeat, no conversation data', 'transport', object({ status: { enum: ['connected', 'disconnected', 'starting'] } }, ['status']));
+route('/gateway/{platform}/catalog', 'get', 'Recognized command names from the shared registry; no handlers or private content', 'transport');
+route('/gateway/{platform}/status', 'post', 'Ephemeral classified transport heartbeat, no conversation data', 'transport', schema(workerStateSchema));
 const openapi = { openapi: '3.1.0', info: { title: 'OCC Integration Protocol', version: '1.0',
   description: 'All paths are relative to OCC_BASE_PATH/api/v1. Project tokens are limited to their own project. Session writes also require CSRF and exact Origin. No remote execution or arbitrary webhooks.' },
   servers: [{ url: '/sys/api/v1' }], paths,

@@ -1,5 +1,6 @@
 import http from 'node:http';
 import { parseContainers } from '../docker.js';
+import { monitorServer } from '../monitor-server.js';
 
 // The only host-socket operation is this literal GET. No caller-controlled paths, IDs, or methods.
 export function readDockerInventory(socketPath = '/var/run/docker.sock'): Promise<unknown> {
@@ -26,13 +27,6 @@ export function readDockerInventory(socketPath = '/var/run/docker.sock'): Promis
     request.on('error', reject);
   });
 }
-export function createMonitorServer() {
-  return http.createServer(async (request, response) => {
-    response.setHeader('content-type', 'application/json');
-    if (request.method !== 'GET' || request.url !== '/containers') {
-      response.writeHead(404); response.end('{"error":"NOT_FOUND"}'); return;
-    }
-    try { response.end(JSON.stringify(await readDockerInventory())); }
-    catch { response.writeHead(503); response.end('{"error":"DOCKER_UNAVAILABLE"}'); }
-  });
+export function createMonitorServer(token: string) {
+  return monitorServer(token, '/containers', () => readDockerInventory());
 }

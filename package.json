@@ -1,6 +1,6 @@
 {
   "name": "oracle-control-core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "engines": {
@@ -20,7 +20,10 @@
     "test:browser": "npm run build:dashboard && node --import tsx scripts/browser-smoke.ts",
     "lint": "eslint .",
     "docs:generate": "node --import tsx scripts/generate-protocol.ts",
-    "check": "npm run lint && npm run typecheck && npm test && npm run build && npm run demo"
+    "check": "npm run lint && npm run typecheck && npm test && npm run build && npm run demo",
+    "setup": "node --import tsx src/operator/setup-cli.ts",
+    "preflight": "node --import tsx src/operator/preflight-cli.ts",
+    "registration": "node --import tsx src/operator/registration-cli.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

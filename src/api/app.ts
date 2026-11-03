@@ -20,6 +20,7 @@ import { DockerMonitor } from '../services/docker.js';
 import { OccError, forbidden } from '../core/errors.js';
 import { equal, randomToken, hashToken, verifyPassword } from '../security/crypto.js';
 import { manifestSchema, metadataSchema, scopes, healthSchema, eventSchema } from '../../packages/integration-sdk/src/schema.js';
+import { workerStateSchema, type WorkerState } from '../adapters/recovery.js';
 
 export async function createApp(config: Config, store = new Store(config.OCC_DB_PATH)) {
   const app = Fastify({ logger: { level: 'info', redact: ['req.headers.authorization', 'req.headers.cookie', 'password', 'token', 'text'] },
@@ -27,10 +28,10 @@ export async function createApp(config: Config, store = new Store(config.OCC_DB_
     genReqId: () => randomUUID() });
   const identities = new IdentityService(store); const audit = new Audit(store);
   const projects = new Projects(store); const events = new Events(store, projects);
-  const system = new SystemMonitor(); const docker = new DockerMonitor(config);
+  const system = new SystemMonitor(config); const docker = new DockerMonitor(config);
   const router = new CommandRouter(store, audit, projects, system, docker);
   const dispatch = createDispatch(router, identities, audit);
-  const transports = new Map<string, { status: string; observedAt: number }>();
+  const transports = new Map<string, WorkerState & { observedAt: number }>();
   store.db.prepare("UPDATE tasks SET status='failed' WHERE status='running'").run();
   if (config.OCC_IDENTITY_FILE) identities.importFile(config.OCC_IDENTITY_FILE);
   store.cleanup(config.OCC_RETENTION_DAYS);
@@ -137,8 +138,10 @@ export async function createApp(config: Config, store = new Store(config.OCC_DB_
   app.get(`${prefix}/activity`, { preHandler: admin }, async request => envelope(request, audit.recent()));
   app.get(`${prefix}/bots`, { preHandler: admin }, async request => envelope(request, ['telegram', 'whatsapp'].map(platform => {
     const observed = transports.get(platform);
+    const fresh = !!observed && Date.now() - observed.observedAt < 45_000;
     return { platform, mode: config.OCC_MODE, status: config.OCC_MODE === 'mock' ? 'mock — no external connections'
-      : observed && Date.now() - observed.observedAt < 65_000 ? observed.status : 'unobserved — inspect isolated worker' };
+      : fresh ? observed!.status : 'unobserved — inspect isolated worker', fresh, observedAt: observed ? new Date(observed.observedAt).toISOString() : null,
+      reason: observed?.reason ?? null, attempt: observed?.attempt ?? 0, nextRetryAt: fresh ? observed!.nextRetryAt : null };
   })));
   app.get(`${prefix}/settings`, { preHandler: admin }, async request => envelope(request, {
     mode: config.OCC_MODE, basePath: config.OCC_BASE_PATH, retentionDays: config.OCC_RETENTION_DAYS,
@@ -165,9 +168,12 @@ export async function createApp(config: Config, store = new Store(config.OCC_DB_
   }
   app.post(`${prefix}/gateway/:platform/status`, async request => {
     const platform = transportAuth(request);
-    const { status } = z.object({ status: z.enum(['connected', 'disconnected', 'starting']) }).strict().parse(request.body);
-    transports.set(platform, { status, observedAt: Date.now() });
+    const state = workerStateSchema.parse(request.body);
+    transports.set(platform, { ...state, observedAt: Date.now() });
     return envelope(request, { accepted: true });
+  });
+  app.get(`${prefix}/gateway/:platform/catalog`, async request => {
+    transportAuth(request); return envelope(request, router.catalog());
   });
   app.post(`${prefix}/gateway/:platform/commands`, async request => {
     const platform = transportAuth(request);

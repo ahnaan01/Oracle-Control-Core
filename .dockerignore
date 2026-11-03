@@ -7,5 +7,7 @@ sessions
 .env
 .env.*
 config/identities.json
+config/*.local.json
+**/__pycache__
 coverage
 *.log

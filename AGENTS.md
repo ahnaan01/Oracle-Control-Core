@@ -14,7 +14,10 @@ migrations. No Redis, external database, or AI framework is required.
   (grammY) and WhatsApp (Baileys) workers run separately from the core; only the
   WhatsApp worker may mount its authentication volume.
 - `src/services/`: real OS metrics, optional restricted Docker inventory, and
-  future path-policy helpers. No shell or Docker write operations.
+  future path-policy helpers. Host collector, cgroup v2 and OCC process metrics
+  are separate. No shell or Docker write operations.
+- `src/operator/`: non-overwriting private setup, read-only preflight and
+  metadata-only existing-application registration helpers.
 - `src/api/app.ts`: application factory, authentication and API boundary. Business
   rules belong in core/services, never in separate platform implementations.
 - `packages/integration-sdk/`: protocol schemas and fetch-based TypeScript SDK.
@@ -59,6 +62,14 @@ make an upgrade succeed. Keep the system resource-conscious and buildable.
 - Do not mount the Docker socket in core. The optional monitor has a literal
   read-only inventory request and no caller-controlled daemon paths or methods.
   A read-only socket mount alone does NOT restrict Docker API privileges.
+- Keep each collector on its own internal network shared only with core, with
+  a distinct file-backed token. Messaging uses gateway/egress only. Core must
+  never mount host procfs, host root or WhatsApp sessions. Host collection uses
+  individual read-only counter files and a selected empty filesystem directory.
+- Worker recovery must stay bounded/classified. Never loop pairing after auth
+  failure, auto-merge JIDs/LIDs, duplicate listeners/sessions, or delete session
+  credentials to force recovery. Preserve the exclusive session lock and require
+  operator inspection after a crash. No chat bodies in health or audit metadata.
 - No arbitrary project URL requests: manifest URLs are metadata, avoiding SSRF.
   Any future file tool must resolve real paths, prevent symlink/traversal escapes,
   enforce per-project authorization, and address filesystem race conditions.
@@ -82,6 +93,9 @@ requires local socket/listen permission in restrictive sandboxes. `npm test`
 builds dashboard assets and uses Fastify injection and mocked external services.
 `npm run test:browser` additionally uses locally installed Chromium (configure
 `OCC_CHROMIUM_PATH`) and disposable local accounts; it blocks non-loopback traffic.
+`npm run setup -- config/setup.local.json` creates new private operator config
+only; `npm run preflight` checks actual data/config read-only without printing
+secrets. Use the actual persistent volume when bootstrapping administrators.
 Tests must cover authorization failures, privacy, scope isolation, CSRF, base-path
 assets, persistence and any changed behavior, not merely happy paths.
 
@@ -89,6 +103,11 @@ For deployment changes validate `docker compose config --quiet`, build the image
 and run its local health check when Docker is available. ARM64 has a dedicated CI
 job. Report architecture/container/browser checks as unrun when unavailable;
 never claim production or live transport validation from mock test results.
+The disposable deployment smoke is `python3 scripts/container-smoke.py <image>
+[arm64|amd64]`; it verifies real collector observations and network denial by
+DNS/IP, standalone/Compose discovery, SQLite restart and private session storage.
+It must remove only its UUID project/probes, never global or existing resources.
 
 Read `docs/SECURITY.md`, `docs/INTEGRATION_PROTOCOL.md`, `docs/DEPLOYMENT.md` and
-`docs/ROADMAP.md` before extending the respective boundaries.
+`docs/ROADMAP.md` before extending the respective boundaries. Read the ordered
+`docs/FIRST_DEPLOYMENT.md` for operator-only first deployment and recovery.

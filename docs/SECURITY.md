@@ -51,8 +51,7 @@ exercise that user's permitted read operations; revoke the link and restart core
 
 Telegram trusts grammY's `from.id` (not group membership or display names), rejects
 bot senders and channels, and supports `/command@botname`. WhatsApp trusts Baileys'
-sender JID, considers the actual group participant, accepts only slash-command
-candidates, ignores history sync/from-self/status broadcasts, and ignores commands
+sender JID, considers the actual group participant, accepts only recognized slash-commands, ignores history sync/from-self/status broadcasts, and ignores commands
 directed elsewhere. Unknown commands, ordinary conversations and unapproved
 targets are never persisted as commands or forwarded to an AI/n8n subsystem.
 
@@ -114,8 +113,27 @@ The Docker socket provides effectively host-root authority even when mounted
 `:ro`. Only the opt-in small monitor process mounts it. Its only literal upstream
 request lists containers; it accepts no caller-supplied Docker API route. Treat
 that sidecar as a privileged security boundary, patch it, and never publish its
-port or attach untrusted workloads to its internal network. Core and workers use
+port or attach untrusted workloads to its internal network. Each collector additionally requires its own file-backed bearer credential.
+Docker and host collectors have distinct internal networks; neither messaging
+worker joins them. CI checks denial by DNS and IP from a gateway+egress probe.
+The host collector sees individual counter files and a selected empty disk
+directory only. Core has no host-procfs or host-root mount. Core and workers use
 non-root users, dropped capabilities, no-new-privileges and read-only rootfs.
+
+Recovery permits at most six transient reconnects per rolling 15-minute window.
+Retired connection generations cannot schedule new retries; sessions/listeners
+close before replacements. Logout, invalid session, auth failure, replacement and
+unknown protocol failures require operator action. Explicit WhatsApp pairing can
+be requested at most once per process. A terminal state stays observable rather
+than relying on an unlimited restart policy. The exclusive WhatsApp lock survives
+crashes deliberately; stale recovery requires an explicit operator inspection,
+not automatic credential deletion. See FIRST_DEPLOYMENT.md for exact recovery.
+
+`npm run setup` generates new, private individual credential files and refuses
+existing targets. It never changes an existing database. `npm run preflight`
+uses read-only DB access and fixed diagnostics with no submitted values, tokens
+or raw SDK errors. File-backed credentials require a regular private file (0600).
+Core never mounts a directory containing all worker credentials.
 
 The future path-policy helper rejects absolute paths and realpath traversal or
 symlink escapes. It is for **existing read targets only**. It is not a safe file

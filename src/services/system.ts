@@ -1,5 +1,9 @@
 import os from 'node:os';
 import { readFile, readdir, statfs } from 'node:fs/promises';
+import { loadConfig, type Config } from '../config.js';
+import { CgroupMonitor } from './cgroup.js';
+import { collectorJson } from './collector-client.js';
+import { hostMetricsSchema } from './host/schema.js';
 
 export function parseNetwork(text: string) {
   return text.split('\n').slice(2).flatMap(line => {
@@ -15,6 +19,8 @@ function cpuTicks() {
     total: out.total + Object.values(cpu.times).reduce((a, b) => a + b, 0) }), { idle: 0, total: 0 });
 }
 export class SystemMonitor {
+  private cgroup = new CgroupMonitor();
+  constructor(private config: Config = loadConfig({})) {}
   private previous = cpuTicks();
   private cached?: { at: number; value: Awaited<ReturnType<SystemMonitor['collect']>> };
   private pending?: Promise<Awaited<ReturnType<SystemMonitor['collect']>>>;
@@ -22,16 +28,27 @@ export class SystemMonitor {
     const current = cpuTicks(); const delta = current.total - this.previous.total;
     const usage = delta > 0 ? 100 * (1 - (current.idle - this.previous.idle) / delta) : null;
     this.previous = current;
-    const [disk, network, processes] = await Promise.all([
+    const [disk, network, processes, host, container] = await Promise.all([
       statfs(process.cwd()).then(x => ({ totalBytes: x.blocks * x.bsize, availableBytes: x.bavail * x.bsize })).catch(() => null),
       readFile('/proc/net/dev', 'utf8').then(parseNetwork).catch(() => null),
       readdir('/proc').then(x => x.filter(n => /^\d+$/.test(n)).length).catch(() => null),
+      this.host(), this.cgroup.snapshot(),
     ]);
-    return { sampledAt: new Date().toISOString(), scope: 'runtime OS view (may reflect container/host limits)',
+    return { sampledAt: new Date().toISOString(), scope: 'runtime OS view — not confirmed host or container totals', source: 'node:os + runtime procfs',
       cpu: { cores: os.availableParallelism(), usagePercent: usage, load: os.loadavg() },
       memory: { totalBytes: os.totalmem(), freeBytes: os.freemem() }, disk, network,
       uptimeSeconds: os.uptime(), processUptimeSeconds: process.uptime(), processCount: processes,
-      processMemoryBytes: process.memoryUsage().rss, os: os.platform(), architecture: os.arch() };
+      processMemoryBytes: process.memoryUsage().rss, os: os.platform(), architecture: os.arch(), host, container,
+      process: { scope: 'occ-process', source: 'node:process', uptimeSeconds: process.uptime(), memoryRssBytes: process.memoryUsage().rss, pid: process.pid } };
+  }
+  private async host() {
+    if (this.config.OCC_HOST_MONITOR_MODE === 'disabled') return { available: false, source: 'isolated-procfs-collector', reason: 'Host collector disabled', metrics: null };
+    try {
+      const metrics = hostMetricsSchema.parse(await collectorJson(new URL('/metrics', this.config.OCC_HOST_MONITOR_URL), this.config.OCC_HOST_MONITOR_TOKEN!, 64_000));
+      const age = Date.now() - Date.parse(metrics.sampledAt);
+      if (age > 30_000 || age < -5000) throw new Error('Stale or invalid collector clock');
+      return { available: true, source: metrics.source, reason: null, metrics };
+    } catch { return { available: false, source: 'isolated-procfs-collector', reason: 'Host collector unavailable, stale or invalid', metrics: null }; }
   }
   async snapshot() {
     if (this.cached && Date.now() - this.cached.at < 5000) return this.cached.value;

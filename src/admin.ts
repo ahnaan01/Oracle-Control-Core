@@ -6,14 +6,15 @@ import { hashPassword, randomToken } from './security/crypto.js';
 
 process.umask(0o077);
 const config = loadConfig();
-const username = process.argv[2] ?? 'admin';
+const username = process.argv[2] ?? process.env.OCC_BOOTSTRAP_ADMIN_USERNAME ?? 'admin';
 if (!/^[a-zA-Z0-9_-]{1,50}$/.test(username)) throw new Error('Use a simple username (letters, digits, underscore, hyphen)');
 const store = new Store(config.OCC_DB_PATH);
 try {
   if (store.db.prepare('SELECT 1 FROM users WHERE username=?').get(username)) throw new Error('User exists; refusing to overwrite credentials');
   const password = process.env.OCC_ADMIN_PASSWORD ?? randomToken();
   if (password.length < 16 || password.length > 256) throw new Error('Password must contain 16–256 characters');
-  const id = randomUUID();
+  const id = process.env.OCC_BOOTSTRAP_ADMIN_ID || randomUUID();
+  if (!/^[a-zA-Z0-9_-]{1,100}$/.test(id)) throw new Error('Invalid explicit administrator ID');
   store.db.prepare('INSERT INTO users VALUES(?,?,?,?)').run(id, username, await hashPassword(password), JSON.stringify(['admin']));
   console.log(`Created local OCC administrator: ${username}\nInternal OCC user ID: ${id}`);
   if (!process.env.OCC_ADMIN_PASSWORD) console.log(`Generated password (shown once; keep private): ${password}`);

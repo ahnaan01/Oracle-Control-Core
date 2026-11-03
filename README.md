@@ -4,7 +4,7 @@ A lightweight, modular personal server-management platform. OCC brings a project
 registry, system monitoring, messaging commands and integration API into one
 TypeScript backend, with an authenticated React dashboard under **`/sys`**.
 
-This is the initial Phase 1 implementation. It builds, tests and runs locally
+This is the Phase 1.1 deployment-readiness implementation. It builds, tests and runs locally
 without Telegram, WhatsApp, Oracle Cloud or AI API credentials. No production
 server is contacted, and existing TelegramDL and Uptime Kuma installations remain
 independent. AI inference and destructive administration are intentionally absent.
@@ -16,6 +16,7 @@ Use **Node.js 24 LTS** (Linux ARM64 or x64) and npm. Run from this directory:
 ```sh
 npm ci
 cp .env.example .env
+chmod 600 .env
 npm run admin
 npm run dev
 ```
@@ -37,6 +38,14 @@ npm start      # compiled production server; still loopback-only by default
 is started automatically. `npm run demo` starts only a disposable loopback server,
 tests the SDK and mock transports, and removes its in-memory data on exit.
 
+For a first Docker/ARM64 installation, follow
+[the ordered first-deployment guide](docs/FIRST_DEPLOYMENT.md). `npm run setup --
+config/setup.local.json` prepares private, non-overwriting configuration;
+`npm run preflight` validates the actual data/configuration without printing
+secrets. Docker setup uses the same compiled helpers and preserves existing
+SQLite volumes and records. See the guide before starting optional collectors
+or live workers.
+
 ## What works
 
 - SQLite migrations, persistent users, explicit platform links, project registry,
@@ -47,7 +56,8 @@ tests the SDK and mock transports, and removes its in-memory data on exit.
 - Private and allowlisted group authorization. Groups default to status/help/
   health/uptime only. Ordinary WhatsApp messages are ignored without persistence.
 - Dashboard pages for overview, monitoring, projects, bots, containers, activity
-  and settings. Real OS readings; unavailable sources explicitly labeled.
+  and settings. Separate host collector, cgroup and OCC process observations;
+  freshness/source/unavailable states are explicit.
 - Per-project integration scopes, approved cached read-only operations, health
   reporting, namespaced metadata events, idempotency and polling subscriptions.
 - TypeScript SDK, local sample application, JSON manifest schema and OpenAPI.
@@ -55,7 +65,7 @@ tests the SDK and mock transports, and removes its in-memory data on exit.
   sidecar and separate transport workers/session volume.
 
 Raw application logs are deliberately unavailable: safe redaction requires a
-project-specific log integration. Live transports are implemented but **not
+project-specific log integration. Live transports have a mocked, bounded classified recovery policy but are **not
 validated with real accounts**. There is no remote operation executor or webhook
 delivery queue. See [the roadmap](docs/ROADMAP.md) for explicit limits.
 
@@ -64,7 +74,8 @@ delivery queue. See [the roadmap](docs/ROADMAP.md) for explicit limits.
 `npm run demo` links two fictitious sender identities to one in-memory OCC user and
 exercises both mock adapters. It never opens messaging connections.
 
-For a later operator-enabled live deployment, copy
+For a native Node deployment (Docker uses the generated `data/operator/identities.json`
+described in FIRST_DEPLOYMENT.md), copy
 `config/identities.example.json` to ignored `config/identities.json`. Replace the
 example fields with exact sender IDs and the **internal OCC user ID** printed by
 the admin CLI. Map Telegram's numeric `from.id` and Baileys' normalized exact JID
@@ -95,6 +106,11 @@ documents defaults. No administrator exists until explicit bootstrap.
 | `OCC_RETENTION_DAYS` | `30`; audit/events/tasks also capped at 10,000 each |
 | `OCC_DOCKER_MODE` | `disabled`; opt-in `mock` or restricted `proxy` |
 | `OCC_DOCKER_PROXY_URL` | Required only in proxy mode; fixed `/containers` path |
+| `OCC_HOST_MONITOR_MODE` | `disabled`; `collector` requires URL + private token |
+| `OCC_HOST_MONITOR_URL` | Isolated host collector, fixed `/metrics` path |
+| `OCC_HOST_MONITOR_TOKEN`, `OCC_DOCKER_MONITOR_TOKEN` | Separate collector credentials; `*_FILE` supported |
+| `OCC_TELEGRAM_ENABLED`, `OCC_WHATSAPP_ENABLED` | `false`; used by deployment preflight for live mappings |
+| `OCC_BOOTSTRAP_ADMIN_ID`, `OCC_BOOTSTRAP_ADMIN_USERNAME` | Explicit local bootstrap identity from setup |
 | `OCC_IDENTITY_FILE` | Optional explicit sender/group mapping JSON |
 | `OCC_ADMIN_PASSWORD` | Optional local bootstrap input; no default password |
 | `OCC_TELEGRAM_GATEWAY_TOKEN` | Optional unique 32+ character core↔Telegram secret |
@@ -123,6 +139,7 @@ Use the SDK in `packages/integration-sdk/src/index.ts`, the working example in
 
 ## Documentation
 
+- [First deployment, in order](docs/FIRST_DEPLOYMENT.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Integration protocol and HTTP examples](docs/INTEGRATION_PROTOCOL.md)
 - [Security and privacy](docs/SECURITY.md)

@@ -2,6 +2,9 @@ name: CI
 on: [push, pull_request]
 permissions:
   contents: read
+concurrency:
+  group: occ-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -17,17 +20,9 @@ jobs:
       - run: npm run docs:generate && git diff --exit-code -- docs/manifest.schema.json docs/openapi.json
   arm64-image:
     runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t occ:ci .
-      - name: Local container smoke (no deployment)
-        run: |
-          docker run -d --name occ-ci --network none occ:ci
-          for attempt in $(seq 1 30); do
-            health=$(docker inspect --format '{{.State.Health.Status}}' occ-ci)
-            if [ "$health" = healthy ]; then docker rm -f occ-ci; exit 0; fi
-            sleep 2
-          done
-          docker logs occ-ci
-          docker rm -f occ-ci
-          exit 1
+      - run: docker build --build-arg OCC_UID="$(id -u)" --build-arg OCC_GID="$(id -g)" -t occ:ci .
+      - name: Native ARM64 deployment and isolation smoke (no production access)
+        run: python3 scripts/container-smoke.py occ:ci arm64

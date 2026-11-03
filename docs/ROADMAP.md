@@ -10,9 +10,10 @@ Milestone 2: mock adapters and live grammY/Baileys transport code implemented, w
 explicit identity mapping, private/group limits, separate credentials and a
 separate WhatsApp session volume. Mocks exercise the shared core. Real account
 pairing, live platform behavior and reconnect reliability are **not validated**.
-The initial Baileys worker stops after a closed connection instead of repeatedly
-pairing or reconnecting blindly; operators must check session state. A robust
-classified reconnect policy and session backup/recovery workflow remain work.
+Phase 1.1 adds bounded classified reconnects, retired-listener cleanup, a private
+worker health heartbeat, exclusive session locking and explicit operator recovery.
+Live platform behavior remains unverified; mocked recovery does not validate
+pairing or account compatibility.
 
 Milestone 3: login and seven dashboard pages implemented under a runtime-configured
 base path, including nested routes, assets and API calls. Monitoring uses actual
@@ -40,12 +41,27 @@ configuration files nor unit tests establish that the user's server was tested.
 - `/logs` reports unavailable; safe per-project redaction/export is future work.
 - Docker inventory only. No restart/deploy/update/Compose mutation API. systemd
   units can be registered as metadata but are not actively inspected or managed.
-- OS metrics describe the runtime view. Container-aware host/cgroup metrics and
-  authenticated remote collectors require a separate design.
+- Phase 1.1 supplies separate cgroup v2 and authenticated host-collector data.
+  cgroup v1 and arbitrary remote collectors are not implemented; unavailable
+  counters never imply host totals.
 - No password recovery/reset UI, MFA, broad account lifecycle UI, remote identity
   pairing UI or fine-grained dashboard roles. Bootstrap is an explicit local CLI.
 - No AI inference, shell execution, file mutation, n8n, Google Drive, Plex or manga
   library feature. The small AI tool contract is architecture only.
+
+## Phase 1.1 deployment readiness
+
+Implemented: scoped private `/status`, isolated host collector, cgroup v2/process
+metrics, separate authenticated collector networks, classified bounded worker
+recovery, privacy filtering from a core command catalog, setup/preflight helpers,
+metadata-only existing-project registration bundles, dashboard freshness and
+cancellation, and the ordered FIRST_DEPLOYMENT.md guide. SQLite remains schema v1.
+
+Native ARM64 CI runs an actual resource-limited image/Compose smoke with generated
+credentials, standalone and Compose inventory, persistent user/project restart,
+private session volume and DNS/IP network-denial checks. Local AMD64 and GitHub
+ARM64 execution results must be reported separately. No real messaging accounts
+or production server are exercised by these checks.
 
 ## Future custom AI controller
 

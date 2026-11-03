@@ -1,0 +1,12 @@
+{
+  "username": "admin",
+  "basePath": "/sys",
+  "bindPort": 3300,
+  "dockerMode": "disabled",
+  "hostMonitoring": false,
+  "telegramEnabled": false,
+  "whatsappEnabled": false,
+  "telegramIds": [],
+  "whatsappJids": [],
+  "groups": []
+}

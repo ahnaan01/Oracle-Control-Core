@@ -8,6 +8,7 @@ import type { Audit } from './audit.js';
 import type { SystemMonitor } from '../services/system.js';
 import type { DockerMonitor } from '../services/docker.js';
 import { OccError, forbidden } from './errors.js';
+import { parseRecognizedCommand } from './command-parser.js';
 
 export interface CommandResult { ok: boolean; code: string; text: string; data?: unknown; taskId?: string }
 interface Command {
@@ -28,7 +29,24 @@ export class CommandRouter {
       [...new Set(this.commands.values())].filter(c => c.platforms.includes(actor.platform) && (!actor.group || c.groupSafe)
         && (actor.permissions.includes('admin') || actor.permissions.includes(c.permission)))
         .map(c => ({ command: `/${c.name}`, description: c.description })), noArgs, ['start']);
-    add('status', 'Core status summary', 'status:read', true, () => ({ status: 'ok', projects: projects.list().length, version: '0.1.0' }));
+    add('status', 'Core and scoped monitoring status', 'status:read', true, async (_args, actor) => {
+      if (actor.group) return { status: 'ok', version: '0.1.1' };
+      // The status permission alone must not bypass detailed system/container permissions.
+      const data: Record<string, unknown> = { status: 'ok', version: '0.1.1', process: { uptimeSeconds: process.uptime() } };
+      if (actor.permissions.includes('admin') || actor.permissions.includes('projects:read')) data.projects = projects.list().length;
+      if (actor.permissions.includes('admin') || actor.permissions.includes('system:read')) {
+        const metrics = await system.snapshot();
+        const host = metrics.host.metrics;
+        data.host = { ...metrics.host, metrics: host ? { sampledAt: host.sampledAt, cpu: { cores: host.cpu.cores, usagePercent: host.cpu.usagePercent },
+          memory: host.memory, disk: host.disk, uptimeSeconds: host.uptimeSeconds } : null };
+        data.container = metrics.container; data.process = metrics.process;
+        data.applicationFilesystem = { scope: 'OCC application filesystem, not confirmed host disk', ...metrics.disk };
+      }
+      if (actor.permissions.includes('admin') || actor.permissions.includes('containers:read')) {
+        const inventory = await docker.list(); data.docker = { available: inventory.available, mode: inventory.mode, reason: inventory.reason };
+      }
+      return data;
+    });
     add('health', 'Core health', 'status:read', true, () => ({ status: 'ok', database: 'ready' }));
     add('uptime', 'OCC process uptime', 'status:read', true, () => ({ processUptimeSeconds: process.uptime() }));
     add('system', 'Runtime OS metrics', 'system:read', false, () => system.snapshot());
@@ -50,13 +68,9 @@ export class CommandRouter {
   }
   /** A missing parse result is ignored, never audited or sent to AI. */
   parse(text: string, addressedTo?: string) {
-    if (text.length > 512) return null;
-    const match = /^\/([a-z][a-z0-9_]*)(?:@([a-z0-9_]+))?(?:\s+(.*))?$/is.exec(text);
-    if (!match || (match[2] && (!addressedTo || match[2].toLowerCase() !== addressedTo.toLowerCase()))) return null;
-    const name = match[1]!.toLowerCase();
-    if (!this.commands.has(name)) return null;
-    return { name, args: match[3]?.trim().split(/\s+/).filter(Boolean) ?? [] };
+    return parseRecognizedCommand(text, new Set(this.commands.keys()), addressedTo);
   }
+  catalog() { return [...this.commands.keys()]; }
   async execute(name: string, args: string[], actor: Actor, requestId: string = randomUUID()): Promise<CommandResult> {
     const command = this.commands.get(name);
     const taskId = randomUUID();
