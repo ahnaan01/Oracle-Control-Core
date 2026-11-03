@@ -1,0 +1,7 @@
+{
+  "identities": [
+    { "platform": "telegram", "senderId": "REPLACE_WITH_ACTUAL_NUMERIC_USER_ID", "userId": "REPLACE_WITH_OCC_USER_ID" },
+    { "platform": "whatsapp", "senderId": "REPLACE_WITH_EXACT_BAILEYS_SENDER_JID", "userId": "REPLACE_WITH_SAME_OCC_USER_ID" }
+  ],
+  "groups": []
+}

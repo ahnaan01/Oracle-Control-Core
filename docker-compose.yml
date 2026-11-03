@@ -1,0 +1,78 @@
+# An independent project: never add existing Kuma or TelegramDL services here.
+name: occ
+x-hardening: &hardening
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 128
+  tmpfs: [/tmp:size=32m,mode=1777]
+services:
+  core:
+    <<: *hardening
+    build: .
+    image: occ:local
+    init: true
+    ports: ["127.0.0.1:${OCC_BIND_PORT:-3300}:3000"]
+    environment:
+      OCC_MODE: ${OCC_MODE:-mock}
+      OCC_BASE_PATH: ${OCC_BASE_PATH:-/sys}
+      OCC_PUBLIC_ORIGIN: ${OCC_PUBLIC_ORIGIN:-http://localhost:3300}
+      OCC_SECURE_COOKIES: ${OCC_SECURE_COOKIES:-false}
+      OCC_TRUST_PROXY: ${OCC_TRUST_PROXY:-false}
+      OCC_RETENTION_DAYS: ${OCC_RETENTION_DAYS:-30}
+      OCC_DOCKER_MODE: ${OCC_DOCKER_MODE:-disabled}
+      OCC_DOCKER_PROXY_URL: http://docker-monitor:2375
+      OCC_TELEGRAM_GATEWAY_TOKEN: ${OCC_TELEGRAM_GATEWAY_TOKEN:-}
+      OCC_WHATSAPP_GATEWAY_TOKEN: ${OCC_WHATSAPP_GATEWAY_TOKEN:-}
+    volumes: ["occ-data:/app/data"]
+    networks: [control]
+    mem_limit: 384m
+    cpus: 0.75
+  # Opt-in only: no socket is mounted into the public-facing core.
+  docker-monitor:
+    <<: *hardening
+    profiles: [monitoring]
+    image: occ:local
+    command: [node, dist/src/services/docker/monitor-main.js]
+    healthcheck: { disable: true }
+    group_add: ["${OCC_DOCKER_GID:-65534}"]
+    volumes: ["/var/run/docker.sock:/var/run/docker.sock:ro"]
+    networks: [control]
+    mem_limit: 128m
+    cpus: 0.25
+  telegram:
+    <<: *hardening
+    profiles: [messaging]
+    image: occ:local
+    command: [node, dist/src/adapters/telegram/worker.js]
+    healthcheck: { disable: true }
+    environment:
+      OCC_MODE: live
+      OCC_CORE_URL: http://core:3000${OCC_BASE_PATH:-/sys}/api/v1
+      OCC_TELEGRAM_GATEWAY_TOKEN: ${OCC_TELEGRAM_GATEWAY_TOKEN:-}
+      OCC_TELEGRAM_TOKEN: ${OCC_TELEGRAM_TOKEN:-}
+    networks: [control, transport-egress]
+    mem_limit: 192m
+    cpus: 0.25
+  whatsapp:
+    <<: *hardening
+    profiles: [messaging]
+    image: occ:local
+    command: [node, dist/src/adapters/whatsapp/worker.js]
+    healthcheck: { disable: true }
+    environment:
+      OCC_MODE: live
+      OCC_CORE_URL: http://core:3000${OCC_BASE_PATH:-/sys}/api/v1
+      OCC_WHATSAPP_GATEWAY_TOKEN: ${OCC_WHATSAPP_GATEWAY_TOKEN:-}
+      OCC_WHATSAPP_SESSION_DIR: /app/sessions/whatsapp
+    volumes: ["occ-whatsapp:/app/sessions/whatsapp"]
+    networks: [control, transport-egress]
+    mem_limit: 384m
+    cpus: 0.5
+networks:
+  control: { internal: true }
+  transport-egress: {}
+volumes:
+  occ-data:
+  occ-whatsapp:

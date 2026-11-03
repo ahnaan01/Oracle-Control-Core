@@ -1,0 +1,10 @@
+node_modules/
+dist/
+dashboard/dist/
+data/
+.env
+.env.*.local
+config/identities.json
+coverage/
+*.log
+sessions/

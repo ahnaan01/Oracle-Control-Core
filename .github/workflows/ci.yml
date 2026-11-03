@@ -1,0 +1,33 @@
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24', cache: npm }
+      - run: npm ci
+      - run: npm run check
+      - run: npm run test:browser
+        env:
+          OCC_CHROMIUM_PATH: /usr/bin/google-chrome
+      - run: npm run docs:generate && git diff --exit-code -- docs/manifest.schema.json docs/openapi.json
+  arm64-image:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t occ:ci .
+      - name: Local container smoke (no deployment)
+        run: |
+          docker run -d --name occ-ci --network none occ:ci
+          for attempt in $(seq 1 30); do
+            health=$(docker inspect --format '{{.State.Health.Status}}' occ-ci)
+            if [ "$health" = healthy ]; then docker rm -f occ-ci; exit 0; fi
+            sleep 2
+          done
+          docker logs occ-ci
+          docker rm -f occ-ci
+          exit 1

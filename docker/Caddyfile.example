@@ -1,0 +1,10 @@
+# Operator-provisioned DNS and TLS only; do not run from Codex against production.
+# Caddy obtains a certificate for a real domain. Preserve existing root routes.
+{$OCC_DOMAIN} {
+    @occ path /sys /sys/*
+    handle @occ {
+        # Preserve /sys. Do NOT use handle_path, which strips it.
+        reverse_proxy 127.0.0.1:3300
+    }
+    # Add your existing root application handling here; OCC does not own /.
+}
