@@ -1,0 +1,57 @@
+{
+  "name": "oracle-control-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "scripts": {
+    "dev": "npm run build:dashboard && node --import tsx --watch src/index.ts",
+    "build": "tsc && npm run build:dashboard",
+    "build:dashboard": "vite build --config dashboard/vite.config.ts",
+    "start": "node dist/src/index.js",
+    "admin": "node --import tsx src/admin.ts",
+    "demo": "node --import tsx examples/sample-integration/demo.ts",
+    "telegram": "node --import tsx src/adapters/telegram/worker.ts",
+    "whatsapp": "node --import tsx src/adapters/whatsapp/worker.ts",
+    "typecheck": "tsc --noEmit && tsc -p dashboard/tsconfig.json",
+    "test": "npm run build:dashboard && vitest run",
+    "test:browser": "npm run build:dashboard && node --import tsx scripts/browser-smoke.ts",
+    "lint": "eslint .",
+    "docs:generate": "node --import tsx scripts/generate-protocol.ts",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build && npm run demo"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/rate-limit": "^10.3.0",
+    "dotenv": "^17.2.3",
+    "fastify": "^5.12.8",
+    "grammy": "^1.46.0",
+    "pino": "^9.14.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "eslint": "^10.14.0",
+    "globals": "^16.5.0",
+    "playwright-core": "^1.64.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.1",
+    "vite": "^7.2.2",
+    "vitest": "^5.1.0"
+  },
+  "optionalDependencies": {
+    "@whiskeysockets/baileys": "6.7.23"
+  },
+  "overrides": {
+    "minimatch": "^11.0.1"
+  }
+}

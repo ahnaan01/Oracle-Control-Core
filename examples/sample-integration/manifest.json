@@ -1,0 +1,14 @@
+{
+  "protocolVersion": "1.0",
+  "id": "sample-app",
+  "name": "Sample application",
+  "description": "A credential-free OCC integration demonstration",
+  "version": "1.0.0",
+  "runtime": "node",
+  "capabilities": ["health", "events"],
+  "operations": [{ "name": "health", "description": "Read cached health", "kind": "health", "readOnly": true, "permission": "project:read" }],
+  "eventsPublished": ["sample-app.ready"],
+  "eventsConsumed": ["sample-app.ready"],
+  "requiredPermissions": ["project:read", "health:write", "events:write", "events:read", "operations:invoke"],
+  "configuration": []
+}

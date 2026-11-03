@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "target": "ES2023", "module": "NodeNext", "moduleResolution": "NodeNext",
+    "strict": true, "noUncheckedIndexedAccess": true, "esModuleInterop": true,
+    "skipLibCheck": true, "outDir": "dist", "rootDir": ".", "resolveJsonModule": true,
+    "declaration": true, "sourceMap": true
+  },
+  "include": ["src/**/*.ts", "packages/**/*.ts", "examples/**/*.ts", "tests/**/*.ts", "agent/**/*.ts", "scripts/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

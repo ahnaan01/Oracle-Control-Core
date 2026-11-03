@@ -1,0 +1,11 @@
+.git
+node_modules
+dist
+dashboard/dist
+data
+sessions
+.env
+.env.*
+config/identities.json
+coverage
+*.log
